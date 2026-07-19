@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
+from typing import List
 import joblib
 import pandas as pd
 
@@ -38,21 +39,30 @@ class Customer(BaseModel):
     total_services: int
     charges_difference: float
 
+def make_prediction(data: pd.DataFrame):
+    data_scaled = scaler.transform(data)
+    churn_pred = churn_model.predict(data_scaled)
+    churn_prob = churn_model.predict_proba(data_scaled)[:, 1]
+
+    data_for_ltv = data.drop(columns=['TotalCharges'])
+    ltv_pred = ltv_model.predict(data_for_ltv)
+
+    results = []
+    for i in range(len(data)):
+        results.append({
+            "churn_prediction": int(churn_pred[i]),
+            "churn_probability": round(float(churn_prob[i]), 3),
+            "predicted_ltv": round(float(ltv_pred[i]), 2)
+        })
+    return results
+
 @app.post("/predict/single")
 def predict_single(customer: Customer):
     data = pd.DataFrame([customer.model_dump()])
+    return make_prediction(data)[0]
 
-    # Churn model expects all 23 columns including TotalCharges
-    data_scaled = scaler.transform(data)
-    churn_pred = churn_model.predict(data_scaled)[0]
-    churn_prob = churn_model.predict_proba(data_scaled)[0][1]
-
-    # LTV model expects TotalCharges EXCLUDED (that's what it predicts)
-    data_for_ltv = data.drop(columns=['TotalCharges'])
-    ltv_pred = ltv_model.predict(data_for_ltv)[0]
-
-    return {
-        "churn_prediction": int(churn_pred),
-        "churn_probability": round(float(churn_prob), 3),
-        "predicted_ltv": round(float(ltv_pred), 2)
-    }
+@app.post("/predict/batch")
+def predict_batch(customers: List[Customer]):
+    data = pd.DataFrame([c.model_dump() for c in customers])
+    results = make_prediction(data)
+    return {"predictions": results, "count": len(results)}
