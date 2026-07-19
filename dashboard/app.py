@@ -34,3 +34,41 @@ st.plotly_chart(fig2, use_container_width=True)
 # --- Section 4: Raw data table ---
 st.subheader("Customer Data")
 st.dataframe(df.head(50))
+
+st.divider()
+
+# --- Section 5: LTV Segmentation ---
+st.subheader("Customer Segmentation by Predicted LTV")
+
+# Load the trained LTV model to generate predictions for all customers
+ltv_model = joblib.load("models/ltv_model.pkl")
+X_ltv = df.drop(columns=['customerID', 'Churn', 'TotalCharges', 'Contract_Label'])
+df['Predicted_LTV'] = ltv_model.predict(X_ltv)
+
+# Segment into Low/Medium/High value tiers
+df['LTV_Segment'] = pd.qcut(df['Predicted_LTV'], q=3, labels=['Low Value', 'Medium Value', 'High Value'])
+
+col1, col2 = st.columns(2)
+with col1:
+    fig3 = px.pie(df, names='LTV_Segment', title="Customer Distribution by LTV Segment")
+    st.plotly_chart(fig3, use_container_width=True)
+
+with col2:
+    segment_churn = df.groupby('LTV_Segment')['Churn'].mean().reset_index()
+    fig4 = px.bar(segment_churn, x='LTV_Segment', y='Churn', title="Churn Rate by LTV Segment")
+    st.plotly_chart(fig4, use_container_width=True)
+
+# --- Section 6: High-risk, high-value customers (the key business insight) ---
+st.subheader("🚨 Priority Retention List: High-Value Customers at Risk")
+
+churn_model = joblib.load("models/churn_model.pkl")
+scaler = joblib.load("models/scaler.pkl")
+X_churn = df.drop(columns=['customerID', 'Churn', 'Predicted_LTV', 'LTV_Segment', 'Contract_Label'])
+X_churn_scaled = scaler.transform(X_churn)
+df['Churn_Probability'] = churn_model.predict_proba(X_churn_scaled)[:, 1]
+
+priority_list = df[(df['LTV_Segment'] == 'High Value') & (df['Churn_Probability'] > 0.4)]
+priority_list = priority_list.sort_values('Churn_Probability', ascending=False)
+
+st.write(f"**{len(priority_list)} high-value customers** flagged as at-risk — these should be prioritized for retention campaigns.")
+st.dataframe(priority_list[['customerID', 'Predicted_LTV', 'Churn_Probability', 'tenure', 'MonthlyCharges']].head(20))
