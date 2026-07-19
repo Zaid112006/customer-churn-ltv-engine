@@ -75,3 +75,17 @@ streamlit run dashboard/app.py
 ## Data Source
 
 Telco Customer Churn Dataset (IBM), ~7,043 customer records.
+
+## Running with Docker
+
+Build the image:
+```bash
+docker build -t churn-ltv-api .
+```
+
+Run the container:
+```bash
+docker run -p 8000:8000 churn-ltv-api
+```
+
+The API will be available at `http://localhost:8000`, with interactive docs at `http://localhost:8000/docs`.
